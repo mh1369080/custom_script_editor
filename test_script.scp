@@ -1,0 +1,11 @@
+Horizontal:
+    Label Label1(Company Code)
+    TextInput Text1(COMP,Company Code)
+End Horizontal
+
+Buttons Submit
+Label Label3(Result:Center)
+
+Command:
+    Button_Clicked:Submit:print Text1:Label3
+End Command
