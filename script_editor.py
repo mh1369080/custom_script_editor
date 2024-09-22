@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTextEdit, QPushButton, 
     QVBoxLayout, QHBoxLayout, QWidget, QScrollArea, QLabel, QLineEdit, 
-    QSpacerItem, QSizePolicy, QDialog
+    QSpacerItem, QSizePolicy, QDialog, QTableWidget, QTableWidgetItem
 )
 
 from script_company_finder import Companies
@@ -12,6 +12,8 @@ from functools import partial
 import pdb
 import requests
 import json
+import datetime
+
 class ScriptInterpreter:
     
     def __init__(self, script, preview_container):
@@ -32,6 +34,7 @@ class ScriptInterpreter:
         
         end_horizontal_found = True
         in_command_block = False
+        in_function_block = False
         
         # Parse the script line by line
         lines = self.script.splitlines()
@@ -89,13 +92,111 @@ class ScriptInterpreter:
                 self._parse_command(line)
                 
                 continue
+            # Check for Function blocks
+            elif line.startswith("Function:"):
+                #pdb.set_trace() 
+                in_function_block = True
+                continue
+            
+            elif line.startswith("End Function"):
+                in_function_block = False
                 
+                continue
+            elif in_function_block == True :
+                self._parse_function(line)
+                
+                continue
+            elif line.startswith("Table("):
+                # Extract table name and option (showdata | showstructure)
+                table_spec = line[len("Table("):-1]  # Remove "Table(" prefix and ")" suffix
+                table_name, option = table_spec.split(",", 1)
+                table_name = table_name.strip()
+                option = option.strip()
+
+                if option == "showdata":
+                    self.show_table_data(table_name)
+                elif option == "showstructure":
+                    self.show_table_structure(table_name)
+                else:
+                    print("Invalid option specified. Use showdata or showstructure.")
+            
 
         
 
         # Add spacer to push everything to the top
         spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         layout.addItem(spacer)
+
+    def Show_Current_Date(self, target_label):
+        target_widget = self.widget_registry.get(target_label)
+        if isinstance(target_widget, QLabel):
+            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+            target_widget.setText(current_date)
+
+    def show_table_data(self, table_name):
+        try:
+            response = requests.get(f'http://localhost:5000/get-table-data/{table_name}')
+            if response.status_code == 200:
+                result = response.json()
+                columns = result['columns']
+                records = result['data']
+
+                # Display the table data
+                self.display_table(records, columns)
+            else:
+                print(f"Error fetching table data: {response.status_code}")
+        except Exception as e:
+            print(f"Error: {str(e)}")
+
+    def display_table(self, data, headers):
+        """
+        Display data in the right pane using a QTableWidget
+        """
+        
+
+        table_widget = QTableWidget()
+        table_widget.setRowCount(len(data))
+        table_widget.setColumnCount(len(headers))
+        table_widget.setHorizontalHeaderLabels(headers)
+
+        # Add data to the table
+        for row_index, row_data in enumerate(data):
+            for col_index, col_data in enumerate(row_data):
+                item = QTableWidgetItem(str(col_data))
+                table_widget.setItem(row_index, col_index, item)
+
+        # Add the table widget to the right pane
+        self.preview_container.layout().addWidget(table_widget)
+        
+    def show_table_structure(self, table_name):
+    
+        try:
+            # Make a request to fetch table structure from the Flask app
+            response = requests.get(f"http://localhost:5000/get-table-structure/{table_name}")
+            if response.status_code == 200:
+                data = response.json()
+                
+                columns = data['columns']  # Extract column headers
+                structure = data['structure']  # Extract structure data
+                #pdb.set_trace() 
+                # Set up the QTableWidget to display the table structure
+                self.table_widget = QTableWidget()
+                self.table_widget.setRowCount(len(structure))
+                self.table_widget.setColumnCount(len(columns))
+                self.table_widget.setHorizontalHeaderLabels(columns)
+
+                # Populate the table widget with the structure data
+                for row_idx, row_data in enumerate(structure):
+                    for col_idx, column_name in enumerate(columns):
+                        value = str(row_data.get(column_name, ''))
+                        self.table_widget.setItem(row_idx, col_idx, QTableWidgetItem(value))
+                self.preview_container.layout().addWidget(self.table_widget)
+            else:
+                print(f"Error fetching table structure: {response.status_code} - {response.json()}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        
+    
     def _parse_command(self, line):
         """
         Parse commands from the Command block.
@@ -113,7 +214,31 @@ class ScriptInterpreter:
                 "action": action,
                 "target": target
             })
-            
+
+    def _parse_function(self, line):
+        """
+        Parse function from the Command block.
+        """
+        # Strip any extra spaces
+        line = line.strip()
+
+        # Check if the line contains a function call with parentheses
+        if line.startswith("Show_Current_Date"):
+            # Extract the argument inside the parentheses
+            if "(" in line and ")" in line:
+                start = line.index("(") + 1
+                end = line.index(")")
+                argument = line[start:end].strip()
+
+                # Check if the argument is a valid widget name
+                if argument in self.widget_registry:
+                    
+                    # Call the Show_Current_Date method and pass the QLabel
+                    self.Show_Current_Date(argument)
+                    
+                else:
+                    print(f"Error: No widget found with the name {argument}.")
+        
 
     def _apply_commands(self):
         #pdb.set_trace()

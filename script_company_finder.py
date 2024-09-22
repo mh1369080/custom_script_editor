@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import  QDialog, QDialogButtonBox,  QPushButton,  QTableWid
 from PyQt6.QtGui import QFont
 import sqlite3
 import pandas as pd
-
+import pdb
+import requests
 class Companies(QDialog):
     def __init__(self, initial_settings, parent=None):
         super().__init__(parent)
@@ -33,19 +34,23 @@ class Companies(QDialog):
         self.companies_Table.setColumnWidth(1, int(0.75 * 500))
 
         self.layout.addWidget(self.companies_Table)
-        conn = sqlite3.connect('accountingdb.db')
-        cursor = conn.execute("SELECT * from companies")
-        records = cursor.fetchall()
-        df = pd.DataFrame(records)
-        for ind in df.index:
-            v =  df[0][ind]
 
-            it = QTableWidgetItem(v)
-            self.companies_Table.setItem(ind, 0, it)
+        # Fetch companies from Flask app API
+        self.fetch_companies()
+        
+        #conn = sqlite3.connect('accountingdb.db')
+        #cursor = conn.execute("SELECT * from companies")
+        #records = cursor.fetchall()
+        #df = pd.DataFrame(records)
+        #for ind in df.index:
+        #    v =  df[0][ind]
 
-            vv =  df[1][ind]
-            it = QTableWidgetItem(vv)
-            self.companies_Table.setItem(ind, 1, it)
+        #    it = QTableWidgetItem(v)
+        #    self.companies_Table.setItem(ind, 0, it)
+
+        #    vv =  df[1][ind]
+        #    it = QTableWidgetItem(vv)
+        #    self.companies_Table.setItem(ind, 1, it)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.buttons.accepted.connect(self.accept)
@@ -53,6 +58,33 @@ class Companies(QDialog):
         self.layout.addWidget(self.buttons)
         self.setLayout(self.layout)
         
+    # Fetch the companies list from the Flask API
+    def fetch_companies(self):
+        #pdb.set_trace() 
+        try:
+            response = requests.get('http://localhost:5000/get-companies')
+            if response.status_code == 200:
+                companies = response.json()
+                self.populate_table(companies)
+            else:
+                print(f"Failed to fetch companies: {response.status_code}")
+        except Exception as e:
+            print(f"Error fetching companies: {str(e)}")
+
+    # Populate the table with the fetched companies
+    def populate_table(self, companies):
+        self.companies_Table.setRowCount(len(companies))
+        for row, company in enumerate(companies):
+            company_code = company["company_code"]
+            company_name = company["company_name"]
+
+            code_item = QTableWidgetItem(company_code)
+            name_item = QTableWidgetItem(company_name)
+
+            self.companies_Table.setItem(row, 0, code_item)
+            self.companies_Table.setItem(row, 1, name_item)
+
+
     def on_company_selected(self, row, column):
         print(f"Double-clicked on row {row}, column {column}")  # Debugging print
     
